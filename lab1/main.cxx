@@ -13,11 +13,17 @@ const int series_element_value_tag = 3;
 const int break_flag_tag = 4;
 
 double read_x_from_file() {
-        std::ifstream file("input.txt");
-        std::stringstream input_str_buffer;
-        input_str_buffer << file.rdbuf();
+        try {
+                std::ifstream file("input.txt");
+                std::stringstream input_str_buffer;
+                input_str_buffer << file.rdbuf();
 
-        return std::stod(input_str_buffer.str());
+                return std::stod(input_str_buffer.str());
+        } catch (std::exception& e) {
+                std::cout << "[FATAL] " << e.what() << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+        return 0;
 }
 
 double get_x_value(int curr_rank, int nodes_cnt) {
@@ -27,6 +33,8 @@ double get_x_value(int curr_rank, int nodes_cnt) {
                 std::cout << "[HOST - 0] square root param value: " << input_x_value << std::endl;
                 std::cout << "[HOST - 0] accuracy: " << accuracy << std::endl;
 
+                input_x_value -= 1;
+
                 for (auto dest_rank = 1; dest_rank < nodes_cnt; dest_rank++) {
                         MPI_Send(&input_x_value, 1, MPI_DOUBLE, dest_rank, x_value_tag, MPI_COMM_WORLD);
                 }
@@ -34,6 +42,15 @@ double get_x_value(int curr_rank, int nodes_cnt) {
                 MPI_Recv(&input_x_value, 1, MPI_DOUBLE, 0, x_value_tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
         return input_x_value;
+}
+
+bool validate_input(double x_value) {
+        if (fabs(x_value) > 1) {
+                std::cout << "[ERROR] Input param value -1 is out of the range [-1, 1]. Exit..." << std::endl;
+                return false;
+        }
+
+        return true;
 }
 
 double factorial(int value) {
@@ -122,6 +139,21 @@ double calculate_square_root(int curr_rank, int nodes_cnt, double x) {
         return series_elements_sum;
 }
 
+void save_to_file(int curr_rank, double value) {
+        if (curr_rank != 0) {
+                return;
+        }
+
+        try {
+                std::ofstream file("output.txt");
+                file << std::fixed << value << std::endl;
+                file.close();
+        } catch (std::exception& e) {
+                std::cout << "[FATAL] " << e.what() << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+}
+
 int main(int argc, char *argv[]) {
         MPI_Init(&argc, &argv);
 
@@ -134,7 +166,13 @@ int main(int argc, char *argv[]) {
         std::cout << "[MPI_INIT_INFO] Current node rank: " << curr_rank << "\tTotal nodes count: " << nodes_cnt << std::endl;
 
         auto sqrt_param = get_x_value(curr_rank, nodes_cnt);
+        if (!validate_input(sqrt_param)) {
+                MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+
         auto result = calculate_square_root(curr_rank, nodes_cnt, sqrt_param);
+
+        save_to_file(curr_rank, result);
 
         MPI_Finalize();
         return 0;
