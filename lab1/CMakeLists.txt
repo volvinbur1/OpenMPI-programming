@@ -7,6 +7,6 @@ project(lab1)
 
 find_package(MPI REQUIRED)
 
-add_executable(lab1 main.cxx)
+add_executable(lab1 lab1/main.cxx)
 
-target_link_libraries(<your_project_name> PRIVATE MPI::MPI_CXX)
+target_link_libraries(lab1 PRIVATE MPI::MPI_CXX)
