@@ -13,8 +13,7 @@ using params_array = std::array<double, 3>;
 params_array read_params_from_file() {
     params_array params;
     try {
-        std::ifstream file;
-        file.open("input.txt");
+        std::ifstream file("input.txt");
         
         for (auto i = 0; i < 3; i++) {
             std::string line;
@@ -23,8 +22,8 @@ params_array read_params_from_file() {
         }
 
         file.close();
-    } catch (std::ifstream::failure& e) {
-        std::cout << "[FATAL] " << e.what();
+    } catch (std::exception& e) {
+        std::cout << "[FATAL] " << e.what() << std::endl;
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
     
@@ -45,8 +44,22 @@ params_array get_parameters(int curr_rank) {
     return params;
 }
 
+bool validate_input(params_array params) {
+    if (params.at(0) > params.at(1)) {
+        std::cout << "[ERROR] Parameter A is greater then B. Exit..." << std::endl;
+        return false;
+    }
+
+    if (params.at(2) < 0 || params.at(2) > 1) {
+        std::cout << "[ERROR] Accuracy parameter in out of (0,1] range. Exit..." << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 bool is_accurate_enough(double new_val, double prev_val, double accuracy) {
-    return fabs(new_val - prev_val) / 3 < accuracy;
+    return fabs(new_val - prev_val) / 3. < accuracy;
 }
 
 double integral_function(double x) {
@@ -76,7 +89,7 @@ double calculate_integral(int curr_rank, int nodes_cnt, params_array params) {
     auto rank_result = integrate_right_rectangle(rank_a_edge, rank_b_edge, params.at(2));
 
     auto total_integrall_value = rank_result;
-    std::vector<double> nodes_results(nodes_cnt);
+    std::vector<double> nodes_results(nodes_cnt - 1);
     if (curr_rank != 0) {
         MPI_Request request = MPI_REQUEST_NULL;
         MPI_Isend(&rank_result, 1, MPI_DOUBLE, 0, curr_rank, MPI_COMM_WORLD, &request);
@@ -92,10 +105,25 @@ double calculate_integral(int curr_rank, int nodes_cnt, params_array params) {
             total_integrall_value += res;
         }
 
-        std::cout << "[HOST - 0] Integral calculation finished successfully: " << std::setprecision(5) << total_integrall_value << std::endl;  
+        std::cout << "[HOST - 0] Integral calculation finished successfully: " << std::fixed << total_integrall_value << std::endl;  
     }
 
     return total_integrall_value;
+}
+
+void save_to_file(int curr_rank, double value) {
+    if (curr_rank != 0) {
+        return;
+    }
+
+    try {
+        std::ofstream file("output.txt");
+        file << std::fixed << value << std::endl;
+        file.close();
+    } catch (std::exception& e) {
+        std::cout << "[FATAL] " << e.what() << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -110,7 +138,13 @@ int main(int argc, char *argv[]) {
     std::cout << "[MPI_INIT_INFO] Current node rank: " << curr_rank << "\tTotal nodes count: " << nodes_cnt << std::endl;
 
     auto params = get_parameters(curr_rank);
+    if (!validate_input(params)) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
     auto result = calculate_integral(curr_rank, nodes_cnt, params);
+
+    save_to_file(curr_rank, result);
 
     MPI_Finalize();
     return 0;
