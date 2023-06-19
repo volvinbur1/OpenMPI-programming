@@ -5,6 +5,7 @@
 #include <limits>
 #include <cmath>
 #include <iomanip>
+#include <chrono>
 
 const double accuracy = 1e-8;
 const int x_value_tag = 1;
@@ -30,8 +31,8 @@ double get_x_value(int curr_rank, int nodes_cnt) {
         double input_x_value;
         if (curr_rank == 0) {
                 input_x_value = read_x_from_file();
-                std::cout << "[HOST - 0] square root param value: " << input_x_value << std::endl;
-                std::cout << "[HOST - 0] accuracy: " << accuracy << std::endl;
+                std::cout << "[HOST - 0] square root param value: " << std::fixed << std::setprecision(10) << input_x_value << std::endl;
+                std::cout << "[HOST - 0] accuracy: " << std::defaultfloat << accuracy << std::endl;
 
                 input_x_value -= 1;
 
@@ -132,10 +133,6 @@ double calculate_square_root(int curr_rank, int nodes_cnt, double x) {
                 }
         }
 
-        if (curr_rank == 0) {
-                std::cout << "[HOST - 0] Calculation finished. Square root of '" << 1 + x << "' is equal " << std::setprecision(10) << series_elements_sum << std::endl;
-        }
-
         return series_elements_sum;
 }
 
@@ -146,7 +143,7 @@ void save_to_file(int curr_rank, double value) {
 
         try {
                 std::ofstream file("output.txt");
-                file << std::fixed << value << std::endl;
+                file << std::fixed << std::setprecision(10) << value << std::endl;
                 file.close();
         } catch (std::exception& e) {
                 std::cout << "[FATAL] " << e.what() << std::endl;
@@ -169,11 +166,23 @@ int main(int argc, char *argv[]) {
         if (!validate_input(sqrt_param)) {
                 MPI_Abort(MPI_COMM_WORLD, 1);
         }
-
+        
+        auto start_time = std::chrono::steady_clock::now();
         auto result = calculate_square_root(curr_rank, nodes_cnt, sqrt_param);
+        auto finish_time = std::chrono::steady_clock::now();
 
         save_to_file(curr_rank, result);
 
         MPI_Finalize();
+
+        if (curr_rank == 0) {
+                std::cout << "[HOST - 0] Calculation finished. Square root of '" <<
+                        std::fixed << std::setprecision(10) << 1 + sqrt_param << "' is equal " << result << std::endl;
+
+                std::cout << std::endl;
+                std::cout << "[HOST - 0] Execution time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish_time - start_time).count() << "[µs]" << std::endl;
+                std::cout << "[HOST - 0] Execution time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish_time - start_time).count() << "[ns]" << std::endl;
+        }
+
         return 0;
 }
