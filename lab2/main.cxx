@@ -7,6 +7,7 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <chrono>
 
 using params_array = std::array<double, 3>;
 
@@ -104,8 +105,6 @@ double calculate_integral(int curr_rank, int nodes_cnt, params_array params) {
         for (auto res : nodes_results) {
             total_integrall_value += res;
         }
-
-        std::cout << "[HOST - 0] Integral calculation finished successfully: " << std::fixed << total_integrall_value << std::endl;  
     }
 
     return total_integrall_value;
@@ -118,7 +117,7 @@ void save_to_file(int curr_rank, double value) {
 
     try {
         std::ofstream file("output.txt");
-        file << std::fixed << value << std::endl;
+        file << std::fixed << std::setprecision(10) << value << std::endl;
         file.close();
     } catch (std::exception& e) {
         std::cout << "[FATAL] " << e.what() << std::endl;
@@ -142,10 +141,22 @@ int main(int argc, char *argv[]) {
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
+    auto start_time = std::chrono::steady_clock::now();
     auto result = calculate_integral(curr_rank, nodes_cnt, params);
+    auto finish_time = std::chrono::steady_clock::now();
 
     save_to_file(curr_rank, result);
 
     MPI_Finalize();
+
+    if (curr_rank == 0) {
+        std::cout << "[HOST - 0] Integral calculation finished successfully: " << std::fixed << std::setprecision(10) << result << std::endl;  
+
+        std::cout << std::endl;
+        std::cout << "[HOST - 0] Execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_time - start_time).count() << "[ms]" << std::endl;
+        std::cout << "[HOST - 0] Execution time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish_time - start_time).count() << "[µs]" << std::endl;
+        std::cout << "[HOST - 0] Execution time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish_time - start_time).count() << "[ns]" << std::endl;
+    }
+
     return 0;
 }
